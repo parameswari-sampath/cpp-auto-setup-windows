@@ -1,5 +1,5 @@
 # Define URLs and paths
-$mingwUrl = "https://github.com/parameswari-sampath/cpp-auto-setup-windows/releases/download/v1.0.0/mingw.zip"
+$mingwUrl = "https://github.com/parameswari-sampath/cpp-auto-setup-windows/releases/download/v1.0.0/cpp.zip"
 $zipPath = "$env:TEMP\mingw.zip"
 $installPath = "C:\iamdev\MinGW"
 $binPath = "$installPath\bin"
