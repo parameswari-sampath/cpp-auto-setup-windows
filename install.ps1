@@ -2,11 +2,13 @@
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
 if (-NOT $isAdmin) {
-    Write-Host "⚠️ Not running as administrator. PATH modification may fail." -ForegroundColor Yellow
-    Write-Host "ℹ️ Consider running PowerShell as Administrator for full functionality." -ForegroundColor Yellow
+    Write-Host "[WARNING] Not running as administrator. PATH modification may fail."
+    Write-Host "[INFO] Consider running PowerShell as Administrator for full functionality."
 } else {
-    Write-Host "✅ Running with administrator privileges" -ForegroundColor Green
+    Write-Host "[SUCCESS] Running with administrator privileges"
 }
+
+Write-Host ""
 
 # Define URLs and paths
 $mingwUrl = "https://github.com/parameswari-sampath/cpp-auto-setup-windows/releases/download/v1.0.0/cpp.zip"
@@ -19,34 +21,35 @@ $exeFile = "$testFolder\hello.exe"
 
 # 1. Create install directory if it doesn't exist
 if (!(Test-Path -Path $installPath)) {
-    Write-Host "📁 Creating install directory: $installPath" -ForegroundColor Cyan
+    Write-Host "[STEP 1/6] Creating install directory: $installPath"
     New-Item -ItemType Directory -Path $installPath -Force | Out-Null
+} else {
+    Write-Host "[STEP 1/6] Install directory already exists: $installPath"
 }
 
 # 2. Download the MinGW ZIP package
-Write-Host "🔽 Downloading MinGW package from $mingwUrl ..." -ForegroundColor Cyan
+Write-Host "[STEP 2/6] Downloading MinGW package..."
+Write-Host "           Source: $mingwUrl"
 try {
     Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath
-    Write-Host "✅ Download completed successfully" -ForegroundColor Green
+    Write-Host "[SUCCESS] Download completed successfully"
 } catch {
-    Write-Host "❌ Failed to download MinGW package: $($_.Exception.Message)" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+    Write-Host "[ERROR] Failed to download MinGW package: $($_.Exception.Message)"
     exit 1
 }
 
 # 3. Extract the archive to the target location
-Write-Host "📦 Extracting MinGW to $installPath ..." -ForegroundColor Cyan
+Write-Host "[STEP 3/6] Extracting MinGW to $installPath..."
 try {
     Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
-    Write-Host "✅ Extraction completed successfully" -ForegroundColor Green
+    Write-Host "[SUCCESS] Extraction completed successfully"
 } catch {
-    Write-Host "❌ Failed to extract archive: $($_.Exception.Message)" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+    Write-Host "[ERROR] Failed to extract archive: $($_.Exception.Message)"
     exit 1
 }
 
 # 4. Add MinGW bin folder to system PATH if not already present
-Write-Host "🔧 Checking system PATH..." -ForegroundColor Cyan
+Write-Host "[STEP 4/6] Configuring environment variables..."
 $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 
 if ($currentPath -notlike "*$binPath*") {
@@ -55,31 +58,31 @@ if ($currentPath -notlike "*$binPath*") {
             # Try to update system PATH (requires admin)
             $newPath = "$currentPath;$binPath"
             [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-            Write-Host "✅ Added $binPath to system PATH." -ForegroundColor Green
+            Write-Host "[SUCCESS] Added $binPath to system PATH"
         } else {
-            Write-Host "⚠️ Cannot modify system PATH without admin privileges." -ForegroundColor Yellow
-            Write-Host "ℹ️ Adding to current session PATH only." -ForegroundColor Yellow
+            Write-Host "[WARNING] Cannot modify system PATH without admin privileges"
+            Write-Host "[INFO] Adding to current session PATH only"
         }
         
         # Always update the current session's PATH
         $env:Path += ";$binPath"
-        Write-Host "✅ Updated current session PATH." -ForegroundColor Green
+        Write-Host "[SUCCESS] Updated current session PATH"
     } catch {
-        Write-Host "❌ Failed to update PATH: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "ℹ️ Continuing with current session PATH only..." -ForegroundColor Yellow
+        Write-Host "[ERROR] Failed to update PATH: $($_.Exception.Message)"
+        Write-Host "[INFO] Continuing with current session PATH only..."
         $env:Path += ";$binPath"
     }
 } else {
-    Write-Host "ℹ️ $binPath is already in system PATH." -ForegroundColor Yellow
+    Write-Host "[INFO] $binPath is already in system PATH"
 }
 
 # 5. Remove the downloaded ZIP file
-Write-Host "🗑️ Cleaning up downloaded ZIP file..." -ForegroundColor Cyan
+Write-Host "[STEP 5/6] Cleaning up downloaded ZIP file..."
 Remove-Item $zipPath -Force
 
 # 6. Create a test folder and write a hello.cpp file
 if (!(Test-Path -Path $testFolder)) {
-    Write-Host "📁 Creating test directory: $testFolder" -ForegroundColor Cyan
+    Write-Host "[STEP 6/6] Creating test directory: $testFolder"
     New-Item -ItemType Directory -Path $testFolder -Force | Out-Null
 }
 
@@ -91,51 +94,52 @@ int main() {
 }
 "@
 
-Write-Host "✍️ Creating test file: $testFile" -ForegroundColor Cyan
+Write-Host "[STEP 6/6] Creating and compiling test file..."
 $helloCppCode | Out-File -Encoding UTF8 $testFile
 
 # 7. Compile hello.cpp using g++
-Write-Host "⚙️ Compiling hello.cpp..." -ForegroundColor Cyan
+Write-Host "           Compiling hello.cpp..."
 try {
     $compileProcess = Start-Process -FilePath "$binPath\g++.exe" -ArgumentList "$testFile", "-o", "$exeFile" -Wait -PassThru -NoNewWindow
     
     if ($compileProcess.ExitCode -eq 0) {
-        Write-Host "✅ Compilation successful!" -ForegroundColor Green
+        Write-Host "[SUCCESS] Compilation successful!"
     } else {
-        Write-Host "❌ Compilation failed with exit code: $($compileProcess.ExitCode)" -ForegroundColor Red
+        Write-Host "[ERROR] Compilation failed with exit code: $($compileProcess.ExitCode)"
     }
 } catch {
-    Write-Host "❌ Failed to compile: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "ℹ️ Make sure g++.exe exists at: $binPath\g++.exe" -ForegroundColor Yellow
+    Write-Host "[ERROR] Failed to compile: $($_.Exception.Message)"
+    Write-Host "[INFO] Make sure g++.exe exists at: $binPath\g++.exe"
 }
 
 # 8. Run the compiled test program if compilation succeeded
 if (Test-Path $exeFile) {
-    Write-Host "🚀 Running test program..." -ForegroundColor Cyan
+    Write-Host "           Running test program..."
     try {
         $output = & $exeFile
-        Write-Host "Program output:" -ForegroundColor Green
-        Write-Host "--------------------" -ForegroundColor Gray
-        Write-Host $output -ForegroundColor White
-        Write-Host "--------------------" -ForegroundColor Gray
+        Write-Host "[TEST OUTPUT] $output"
     } catch {
-        Write-Host "❌ Failed to run test program: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "[ERROR] Failed to run test program: $($_.Exception.Message)"
     }
 } else {
-    Write-Host "❌ Test executable not found. Compilation may have failed." -ForegroundColor Red
+    Write-Host "[ERROR] Test executable not found. Compilation may have failed."
 }
 
-Write-Host "`n🎉 Setup complete!" -ForegroundColor Green
+Write-Host ""
+Write-Host "========================================"
+Write-Host "        SETUP COMPLETED SUCCESSFULLY"
+Write-Host "========================================"
+Write-Host "MinGW C++ compiler has been installed to:"
+Write-Host "  $installPath"
+Write-Host ""
 if ($isAdmin) {
-    Write-Host "ℹ️ System PATH has been updated permanently." -ForegroundColor Yellow
-    Write-Host "ℹ️ You may need to restart your terminal for PATH changes to take effect in new sessions." -ForegroundColor Yellow
+    Write-Host "System PATH has been updated permanently."
+    Write-Host "You may need to restart your terminal for PATH changes"
+    Write-Host "to take effect in new sessions."
 } else {
-    Write-Host "ℹ️ PATH was updated for current session only (admin rights needed for permanent changes)." -ForegroundColor Yellow
+    Write-Host "PATH was updated for current session only."
+    Write-Host "(Admin rights needed for permanent changes)"
 }
-Write-Host "ℹ️ Current session PATH has been updated and should work immediately." -ForegroundColor Yellow
-
-# Only pause if running interactively (not in automated flow)
-if ([Environment]::UserInteractive -and -not [Environment]::GetCommandLineArgs().Contains('-NonInteractive')) {
-    Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
-    Read-Host
-}
+Write-Host ""
+Write-Host "You can now compile C++ programs using: g++ filename.cpp -o output.exe"
+Write-Host "========================================"
