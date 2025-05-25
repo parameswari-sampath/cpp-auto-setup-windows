@@ -1,3 +1,18 @@
+# Check if running as administrator
+if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Host "🔐 Administrator privileges required to modify system PATH..." -ForegroundColor Yellow
+    Write-Host "🔄 Restarting script with administrator privileges..." -ForegroundColor Yellow
+    
+    # Get the current script path
+    $scriptPath = $MyInvocation.MyCommand.Path
+    
+    # Restart the script with admin privileges
+    Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`""
+    exit
+}
+
+Write-Host "✅ Running with administrator privileges" -ForegroundColor Green
+
 # Define URLs and paths
 $mingwUrl = "https://github.com/parameswari-sampath/cpp-auto-setup-windows/releases/download/v1.0.0/cpp.zip"
 $zipPath = "$env:TEMP\mingw.zip"
@@ -9,33 +24,61 @@ $exeFile = "$testFolder\hello.exe"
 
 # 1. Create install directory if it doesn't exist
 if (!(Test-Path -Path $installPath)) {
+    Write-Host "📁 Creating install directory: $installPath" -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $installPath -Force | Out-Null
 }
 
 # 2. Download the MinGW ZIP package
-Write-Host "🔽 Downloading MinGW package from $mingwUrl ..."
-Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath
+Write-Host "🔽 Downloading MinGW package from $mingwUrl ..." -ForegroundColor Cyan
+try {
+    Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath
+    Write-Host "✅ Download completed successfully" -ForegroundColor Green
+} catch {
+    Write-Host "❌ Failed to download MinGW package: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
 
 # 3. Extract the archive to the target location
-Write-Host "📦 Extracting MinGW to $installPath ..."
-Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
+Write-Host "📦 Extracting MinGW to $installPath ..." -ForegroundColor Cyan
+try {
+    Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
+    Write-Host "✅ Extraction completed successfully" -ForegroundColor Green
+} catch {
+    Write-Host "❌ Failed to extract archive: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
 
 # 4. Add MinGW bin folder to system PATH if not already present
+Write-Host "🔧 Checking system PATH..." -ForegroundColor Cyan
 $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 
 if ($currentPath -notlike "*$binPath*") {
-    $newPath = "$currentPath;$binPath"
-    [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-    Write-Host "✅ Added $binPath to system PATH."
+    try {
+        $newPath = "$currentPath;$binPath"
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
+        Write-Host "✅ Added $binPath to system PATH." -ForegroundColor Green
+        
+        # Also update the current session's PATH
+        $env:Path += ";$binPath"
+        Write-Host "✅ Updated current session PATH." -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to update system PATH: $($_.Exception.Message)" -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
 } else {
-    Write-Host "ℹ️ $binPath is already in system PATH."
+    Write-Host "ℹ️ $binPath is already in system PATH." -ForegroundColor Yellow
 }
 
 # 5. Remove the downloaded ZIP file
+Write-Host "🗑️ Cleaning up downloaded ZIP file..." -ForegroundColor Cyan
 Remove-Item $zipPath -Force
 
 # 6. Create a test folder and write a hello.cpp file
 if (!(Test-Path -Path $testFolder)) {
+    Write-Host "📁 Creating test directory: $testFolder" -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $testFolder -Force | Out-Null
 }
 
@@ -47,23 +90,44 @@ int main() {
 }
 "@
 
-Write-Host "✍️ Creating test file: $testFile"
+Write-Host "✍️ Creating test file: $testFile" -ForegroundColor Cyan
 $helloCppCode | Out-File -Encoding UTF8 $testFile
 
 # 7. Compile hello.cpp using g++
-Write-Host "⚙️ Compiling hello.cpp..."
-& "$binPath\g++.exe" $testFile -o $exeFile
+Write-Host "⚙️ Compiling hello.cpp..." -ForegroundColor Cyan
+try {
+    $compileProcess = Start-Process -FilePath "$binPath\g++.exe" -ArgumentList "$testFile", "-o", "$exeFile" -Wait -PassThru -NoNewWindow
+    
+    if ($compileProcess.ExitCode -eq 0) {
+        Write-Host "✅ Compilation successful!" -ForegroundColor Green
+    } else {
+        Write-Host "❌ Compilation failed with exit code: $($compileProcess.ExitCode)" -ForegroundColor Red
+    }
+} catch {
+    Write-Host "❌ Failed to compile: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "ℹ️ Make sure g++.exe exists at: $binPath\g++.exe" -ForegroundColor Yellow
+}
 
 # 8. Run the compiled test program if compilation succeeded
 if (Test-Path $exeFile) {
-    Write-Host "✅ Compilation successful. Running test program..."
-    $output = & $exeFile
-    Write-Host "Program output:"
-    Write-Host "--------------------"
-    Write-Host $output
-    Write-Host "--------------------"
+    Write-Host "🚀 Running test program..." -ForegroundColor Cyan
+    try {
+        $output = & $exeFile
+        Write-Host "Program output:" -ForegroundColor Green
+        Write-Host "--------------------" -ForegroundColor Gray
+        Write-Host $output -ForegroundColor White
+        Write-Host "--------------------" -ForegroundColor Gray
+    } catch {
+        Write-Host "❌ Failed to run test program: $($_.Exception.Message)" -ForegroundColor Red
+    }
 } else {
-    Write-Host "❌ Compilation failed."
+    Write-Host "❌ Test executable not found. Compilation may have failed." -ForegroundColor Red
 }
 
-Write-Host "`n🎉 Setup complete. You may need to restart your terminal or PC for PATH changes to take effect."
+Write-Host "`n🎉 Setup complete!" -ForegroundColor Green
+Write-Host "ℹ️ You may need to restart your terminal for PATH changes to take effect in new sessions." -ForegroundColor Yellow
+Write-Host "ℹ️ Current session PATH has been updated and should work immediately." -ForegroundColor Yellow
+
+# Pause to let user see the results
+Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
+Read-Host
