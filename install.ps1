@@ -1,17 +1,12 @@
 # Check if running as administrator
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "🔐 Administrator privileges required to modify system PATH..." -ForegroundColor Yellow
-    Write-Host "🔄 Restarting script with administrator privileges..." -ForegroundColor Yellow
-    
-    # Get the current script path
-    $scriptPath = $MyInvocation.MyCommand.Path
-    
-    # Restart the script with admin privileges
-    Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`""
-    exit
-}
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
-Write-Host "✅ Running with administrator privileges" -ForegroundColor Green
+if (-NOT $isAdmin) {
+    Write-Host "⚠️ Not running as administrator. PATH modification may fail." -ForegroundColor Yellow
+    Write-Host "ℹ️ Consider running PowerShell as Administrator for full functionality." -ForegroundColor Yellow
+} else {
+    Write-Host "✅ Running with administrator privileges" -ForegroundColor Green
+}
 
 # Define URLs and paths
 $mingwUrl = "https://github.com/parameswari-sampath/cpp-auto-setup-windows/releases/download/v1.0.0/cpp.zip"
@@ -56,17 +51,23 @@ $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 
 if ($currentPath -notlike "*$binPath*") {
     try {
-        $newPath = "$currentPath;$binPath"
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-        Write-Host "✅ Added $binPath to system PATH." -ForegroundColor Green
+        if ($isAdmin) {
+            # Try to update system PATH (requires admin)
+            $newPath = "$currentPath;$binPath"
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
+            Write-Host "✅ Added $binPath to system PATH." -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Cannot modify system PATH without admin privileges." -ForegroundColor Yellow
+            Write-Host "ℹ️ Adding to current session PATH only." -ForegroundColor Yellow
+        }
         
-        # Also update the current session's PATH
+        # Always update the current session's PATH
         $env:Path += ";$binPath"
         Write-Host "✅ Updated current session PATH." -ForegroundColor Green
     } catch {
-        Write-Host "❌ Failed to update system PATH: $($_.Exception.Message)" -ForegroundColor Red
-        Read-Host "Press Enter to exit"
-        exit 1
+        Write-Host "❌ Failed to update PATH: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "ℹ️ Continuing with current session PATH only..." -ForegroundColor Yellow
+        $env:Path += ";$binPath"
     }
 } else {
     Write-Host "ℹ️ $binPath is already in system PATH." -ForegroundColor Yellow
@@ -125,9 +126,16 @@ if (Test-Path $exeFile) {
 }
 
 Write-Host "`n🎉 Setup complete!" -ForegroundColor Green
-Write-Host "ℹ️ You may need to restart your terminal for PATH changes to take effect in new sessions." -ForegroundColor Yellow
+if ($isAdmin) {
+    Write-Host "ℹ️ System PATH has been updated permanently." -ForegroundColor Yellow
+    Write-Host "ℹ️ You may need to restart your terminal for PATH changes to take effect in new sessions." -ForegroundColor Yellow
+} else {
+    Write-Host "ℹ️ PATH was updated for current session only (admin rights needed for permanent changes)." -ForegroundColor Yellow
+}
 Write-Host "ℹ️ Current session PATH has been updated and should work immediately." -ForegroundColor Yellow
 
-# Pause to let user see the results
-Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
-Read-Host
+# Only pause if running interactively (not in automated flow)
+if ([Environment]::UserInteractive -and -not [Environment]::GetCommandLineArgs().Contains('-NonInteractive')) {
+    Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
+    Read-Host
+}
